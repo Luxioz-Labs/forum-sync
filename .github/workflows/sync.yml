@@ -1,0 +1,14 @@
+name: Forum sync
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 sync.py
+        env:
+          TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
