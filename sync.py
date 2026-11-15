@@ -1,10 +1,11 @@
 """Every run: any forum post whose newest message is from a tester (not Tanay, not a bot or webhook)
 gets the Waiting tag, so it shows up as needing a reply."""
-import json, os, urllib.request
+import json, os, re, urllib.request
 
 API = 'https://discord.com/api/v10'
 GUILD, FORUM = '1536391412222787734', '1536391626132291594'
 WAITING = '1536731208740896778'
+ONGOING = '1537034262383951913'
 STAFF = {'707261197606584440'}          # arrowtan (Tanay)
 
 def call(method, path, body=None):
@@ -55,6 +56,13 @@ def set_repo_status(thread_id, tags):
         gh('PATCH', f'/repos/Luxioz-Labs/{repo}', {'description': want})
         print(f'{repo}: description -> {want}')
 
+def asks_question(text):
+    """True when a message asks something: a '?' outside code and links."""
+    t = re.sub(r'```.*?```', ' ', text or '', flags=re.S)
+    t = re.sub(r'`[^`]*`', ' ', t)
+    t = re.sub(r'https?://\S+', ' ', t)
+    return '?' in t
+
 def from_tester(m):
     a = m['author']
     return not (a.get('bot') or m.get('webhook_id') or a['id'] in STAFF)
@@ -63,13 +71,18 @@ threads = [t for t in call('GET', f'/guilds/{GUILD}/threads/active')['threads'] 
 changed = 0
 for t in threads:
     tags = t.get('applied_tags') or []
-    if WAITING not in tags:
-        msgs = call('GET', f"/channels/{t['id']}/messages?limit=1")
-        if msgs and from_tester(msgs[0]):
-            tags = [WAITING]
-            call('PATCH', f"/channels/{t['id']}", {'applied_tags': tags})
-            print(f"{t['name']}: Waiting (last message from {msgs[0]['author']['username']})")
-            changed += 1
+    msgs = call('GET', f"/channels/{t['id']}/messages?limit=1")
+    last = msgs[0] if msgs else None
+    if last and from_tester(last) and WAITING not in tags:
+        tags = [WAITING]
+        call('PATCH', f"/channels/{t['id']}", {'applied_tags': tags})
+        print(f"{t['name']}: Waiting (last message from {last['author']['username']})")
+        changed += 1
+    elif last and last['author']['id'] in STAFF and asks_question(last['content']) and WAITING in tags:
+        tags = [ONGOING]
+        call('PATCH', f"/channels/{t['id']}", {'applied_tags': tags})
+        print(f"{t['name']}: On going (Tanay asked a question)")
+        changed += 1
     want = named(t['name'], tags)
     if want != t['name']:
         call('PATCH', f"/channels/{t['id']}", {'name': want})
