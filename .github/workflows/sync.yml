@@ -12,3 +12,5 @@ jobs:
       - run: python3 sync.py
         env:
           TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_SYNC_TOKEN }}
+          THREAD_REPOS: ${{ secrets.THREAD_REPOS }}
