@@ -33,6 +33,28 @@ def named(name, tags):
     mark = next((EMOJI[t] for t in tags if t in EMOJI), '')
     return (base.rstrip() + (' ' + mark if mark else ''))[:100]
 
+STATUS = {'1536731186779525130': 'Done', '1536731208740896778': 'Waiting on dev', '1537034262383951913': 'With testers'}
+REPOS = json.loads(os.environ.get('THREAD_REPOS') or '{}')   # thread id -> repo name
+
+def gh(method, path, body=None):
+    req = urllib.request.Request('https://api.github.com' + path, method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json',
+                 'User-Agent': 'LuxiozLabs forum-sync'})
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read() or b'null')
+
+def set_repo_status(thread_id, tags):
+    repo = REPOS.get(thread_id)
+    tag = next((t for t in tags if t in STATUS), None)
+    if not repo or not os.environ.get('GH_TOKEN'):
+        return
+    want = (f"{EMOJI[tag]} {STATUS[tag]} · " if tag else '') + f"Test builds, guide and bug reports for {repo}"
+    have = gh('GET', f'/repos/Luxioz-Labs/{repo}').get('description')
+    if have != want:
+        gh('PATCH', f'/repos/Luxioz-Labs/{repo}', {'description': want})
+        print(f'{repo}: description -> {want}')
+
 def from_tester(m):
     a = m['author']
     return not (a.get('bot') or m.get('webhook_id') or a['id'] in STAFF)
@@ -52,4 +74,5 @@ for t in threads:
     if want != t['name']:
         call('PATCH', f"/channels/{t['id']}", {'name': want})
         print(f"renamed {t['name']!r} -> {want!r}")
+    set_repo_status(t['id'], tags)
 print(f'checked {len(threads)} posts, changed {changed}')
